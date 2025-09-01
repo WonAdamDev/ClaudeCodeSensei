@@ -1,0 +1,48 @@
+name: Daily Unreal Learning
+
+on:
+  schedule:
+    - cron: '0 1 * * *'  # UTC 1시 = 한국 시간 10시
+  workflow_dispatch:     # 수동 실행도 가능
+
+jobs:
+  generate-learning-report:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install dependencies
+      run: |
+        pip install requests
+        pip install anthropic
+        
+    - name: Generate daily report
+      env:
+        CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+      run: python scripts/generate_report.py
+      
+    - name: Commit report
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add reports/
+        git commit -m "📚 오늘의 언리얼 학습 리포트 $(date +%Y-%m-%d)" || exit 0
+        git push
+        
+    - name: Send email notification
+      uses: dawidd6/action-send-mail@v3
+      with:
+        server_address: smtp.gmail.com
+        server_port: 465
+        username: ${{ secrets.EMAIL_USERNAME }}
+        password: ${{ secrets.EMAIL_PASSWORD }}
+        subject: "🎮 오늘의 언리얼 엔진 학습 리포트"
+        body: file://reports/today.md
+        to: your-email@gmail.com
