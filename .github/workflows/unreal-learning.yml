@@ -1,62 +1,61 @@
-name: Daily Unreal Learning
+name: Daily Learning with Discord
 
 on:
   schedule:
-    - cron: '0 1 * * *'  # UTC 1시 = 한국 시간 10시
-  workflow_dispatch:     # 수동 실행도 가능
+    - cron: '7 1 * * *'
+  workflow_dispatch:
 
 permissions:
-  contents: write  # 파일 생성/수정 권한
+  contents: write
 
 jobs:
-  generate-learning-report:
+  generate-and-notify:
     runs-on: ubuntu-latest
     
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
       
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
-        
-    - name: Install dependencies
-      run: |
-        pip install requests
-        pip install anthropic
-        
     - name: Generate daily report
       env:
         CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
-      run: python scripts/generate_report.py
-
-    - name: Check if report was created
       run: |
-          if [ -f "reports/today.md" ]; then
-            echo "✅ 리포트 생성 완료"
-            cat reports/today.md
-          else
-            echo "❌ 리포트 생성 실패"
-            exit 1
-          fi
+        mkdir -p reports
+        python scripts/generate_report.py
+        echo "TODAY=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
       
-    - name: Commit and push changes
+    - name: Commit report
       uses: stefanzweifel/git-auto-commit-action@v4
       with:
-        commit_message: '📚 오늘의 언리얼 학습 리포트 - ${{ env.TODAY }}'
+        commit_message: '📚 학습 리포트 - ${{ env.TODAY }}'
         file_pattern: 'reports/*.md'
-        commit_user_name: 'Unreal Learning Bot'
-        commit_user_email: 'learning-bot@github-actions.com'
         
-    - name: Send email notification
-      uses: dawidd6/action-send-mail@v3
-      with:
-        server_address: smtp.gmail.com
-        server_port: 465
-        username: ${{ secrets.EMAIL_USERNAME }}
-        password: ${{ secrets.EMAIL_PASSWORD }}
-        from: ${{ secrets.EMAIL_USERNAME }} 
-        subject: "🎮 오늘의 언리얼 엔진 학습 리포트"
-        body: file://reports/today.md
-        to: your-email@gmail.com
+    - name: Send to Discord
+      env:
+        DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      run: |
+        # 디스코드 웹훅으로 알림 전송
+        curl -H "Content-Type: application/json" \
+             -X POST \
+             -d '{
+               "embeds": [{
+                 "title": "📚 새로운 학습 자료가 준비되었습니다!",
+                 "description": "오늘의 언리얼 엔진 학습 주제를 확인해보세요.",
+                 "color": 3447003,
+                 "fields": [
+                   {
+                     "name": "📅 날짜",
+                     "value": "'$TODAY'",
+                     "inline": true
+                   },
+                   {
+                     "name": "🔗 리포트 링크",
+                     "value": "https://github.com/'${{ github.repository }}'/blob/main/reports/today.md"
+                   }
+                 ],
+                 "footer": {
+                   "text": "궁금한 점이 있으면 !질문 명령어를 사용하세요!"
+                 }
+               }]
+             }' \
+             $DISCORD_WEBHOOK_URL
