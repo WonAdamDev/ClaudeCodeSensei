@@ -5,6 +5,9 @@ on:
     - cron: '0 1 * * *'  # UTC 1시 = 한국 시간 10시
   workflow_dispatch:     # 수동 실행도 가능
 
+permissions:
+  contents: write  # 파일 생성/수정 권한
+
 jobs:
   generate-learning-report:
     runs-on: ubuntu-latest
@@ -27,14 +30,24 @@ jobs:
       env:
         CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
       run: python scripts/generate_report.py
-      
-    - name: Commit report
+
+    - name: Check if report was created
       run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git add reports/
-        git commit -m "📚 오늘의 언리얼 학습 리포트 $(date +%Y-%m-%d)" || exit 0
-        git push
+          if [ -f "reports/today.md" ]; then
+            echo "✅ 리포트 생성 완료"
+            cat reports/today.md
+          else
+            echo "❌ 리포트 생성 실패"
+            exit 1
+          fi
+      
+    - name: Commit and push changes
+      uses: stefanzweifel/git-auto-commit-action@v4
+      with:
+        commit_message: '📚 오늘의 언리얼 학습 리포트 - ${{ env.TODAY }}'
+        file_pattern: 'reports/*.md'
+        commit_user_name: 'Unreal Learning Bot'
+        commit_user_email: 'learning-bot@github-actions.com'
         
     - name: Send email notification
       uses: dawidd6/action-send-mail@v3
